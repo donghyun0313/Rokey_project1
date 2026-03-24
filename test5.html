@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project 뽀득뽀득 - Controller</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800;900&display=swap');
+    
+    body {
+      font-family: 'Pretendard', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      background-color: #f1f5f9;
+    }
+    .floating-card {
+      background: #ffffff;
+      border: 2px solid #e2e8f0;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-5px);
+    }
+
+    /* === 기본 활성 상태 === */
+    .active-step {
+      background-color: #2563eb !important;
+      color: white !important;
+      border-color: #1e40af !important;
+      box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+      z-index: 10;
+    }
+
+    /* === 🚀 모션 강화 버전 (Bigger & Bouncier) === */
+    
+    /* PICK */
+    @keyframes anim-pick {
+      0%, 100% { transform: translateY(0) scale(1.05); }
+      50% { transform: translateY(-12px) scale(1.15); }
+    }
+
+    /* TURBID (Trash Out) */
+    @keyframes anim-turbid {
+      0%, 100% { transform: rotate(0deg) scale(1.05); }
+      25% { transform: rotate(-10deg) scale(1.1); }
+      75% { transform: rotate(10deg) scale(1.1); }
+    }
+
+    /* HOT */
+    @keyframes anim-hot {
+      0%, 100% { transform: scale(1.05); }
+      50% { transform: scale(1.25); box-shadow: 0 0 25px rgba(255, 100, 100, 0.4); }
+    }
+
+    /* BRUSH */
+    @keyframes anim-brush {
+      0%, 100% { transform: translateX(0) scale(1.05); }
+      25% { transform: translateX(-6px) rotate(-5deg) scale(1.05); }
+      75% { transform: translateX(6px) rotate(5deg) scale(1.05); }
+    }
+
+    /* COLD */
+    @keyframes anim-cold {
+      0% { transform: translate(0, 0) scale(1.05); }
+      25% { transform: translate(3px, 3px) rotate(2deg) scale(1.05); }
+      50% { transform: translate(-3px, -3px) rotate(-2deg) scale(1.05); }
+      75% { transform: translate(-3px, 3px) rotate(2deg) scale(1.05); }
+      100% { transform: translate(0, 0) scale(1.05); }
+    }
+
+    /* STACK */
+    @keyframes anim-stack {
+      0%, 100% { transform: scale(1.05, 1.05); }
+      40% { transform: scale(1.3, 0.8) translateY(5px); }
+      60% { transform: scale(0.9, 1.2) translateY(-5px); }
+    }
+
+    /* === 애니메이션 적용 === */
+    #step-PICK.active-step, #step-PICK:hover     { animation: anim-pick 0.8s infinite cubic-bezier(0.28, 0.84, 0.42, 1); cursor: pointer; }
+    #step-TURBID.active-step, #step-TURBID:hover { animation: anim-turbid 1.2s infinite ease-in-out; cursor: pointer; }
+    #step-HOT.active-step, #step-HOT:hover       { animation: anim-hot 0.8s infinite ease-in-out; cursor: pointer; }
+    #step-BRUSH.active-step, #step-BRUSH:hover   { animation: anim-brush 0.4s infinite linear; cursor: pointer; }
+    #step-COLD.active-step, #step-COLD:hover     { animation: anim-cold 0.2s infinite linear; cursor: pointer; }
+    #step-STACK.active-step, #step-STACK:hover   { animation: anim-stack 0.8s infinite ease-in-out; cursor: pointer; }
+
+    /* === START 버튼 눌림 효과용 클래스 === */
+    .btn-pressed {
+        transform: translateY(4px) scale(0.98) !important;
+        box-shadow: inset 0 3px 5px rgba(0,0,0,0.2) !important;
+        border-bottom-width: 0px !important;
+        background-color: #1d4ed8 !important; /* blue-700 */
+        opacity: 0.9;
+    }
+
+  </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md floating-card rounded-[3rem] p-8 space-y-8 transition-all duration-500">
+
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-black tracking-tighter text-blue-600 uppercase">뽀득뽀득</h1>
+        <p id="system-time" class="text-[11px] text-slate-400 font-mono italic font-bold mt-1">SYSTEM READY</p>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-full border-2 border-slate-100 shadow-sm">
+        <div id="status-dot" class="w-2.5 h-2.5 bg-slate-300 rounded-full"></div>
+        <span id="conn-text" class="text-[11px] font-black text-slate-400 uppercase tracking-wider">Offline</span>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <p class="text-[11px] font-extrabold text-slate-400 uppercase tracking-[0.2em] ml-1">Process Steps</p>
+      <div class="grid grid-cols-6 gap-2">
+        <div id="step-PICK" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">PICK</div>
+        <div id="step-TURBID" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">TURBID</div>
+        <div id="step-HOT" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">HOT</div>
+        <div id="step-BRUSH" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">BRUSH</div>
+        <div id="step-COLD" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">COLD</div>
+        <div id="step-STACK" class="bg-slate-50 border-2 border-slate-100 rounded-xl py-3 text-[11px] text-center text-slate-400 font-extrabold transition-all duration-300 shadow-sm">STACK</div>
+      </div>
+    </div>
+
+    <div class="bg-blue-50/50 border-2 border-blue-100 rounded-[2rem] p-6 shadow-sm">
+      <div class="flex justify-between items-end mb-4">
+        <div class="overflow-hidden w-[70%]"> <p class="text-blue-500 text-[11px] font-black mb-1 uppercase">Live Status</p>
+          <h2 id="status-text" class="text-2xl font-black text-slate-800 italic uppercase whitespace-nowrap truncate tracking-tight">READY</h2>
+        </div>
+        <div>
+          <span id="progress-val" class="text-5xl font-black text-blue-600">0</span>
+          <span class="text-blue-600 text-2xl font-bold">%</span>
+        </div>
+      </div>
+      <div class="w-full bg-white h-6 p-1 rounded-full border-2 border-blue-100">
+        <div id="progress-bar" class="bg-gradient-to-r from-blue-600 to-blue-400 h-full w-0 rounded-full transition-all duration-1000"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4">
+      <button id="btn-start" onclick="sendCommand('START')" class="group bg-blue-600 hover:bg-blue-700 py-8 rounded-[2.5rem] shadow-xl border-b-4 border-blue-800 transition-all active:scale-[0.98]">
+        <span id="btn-start-text" class="text-3xl font-black text-white uppercase">System Start</span>
+      </button>
+
+      <div class="grid grid-cols-3 gap-3">
+        <button onclick="sendCommand('PAUSE')" class="bg-white border-2 border-slate-200 py-5 rounded-2xl font-black text-slate-400 uppercase text-sm hover:border-blue-300 hover:text-blue-500 transition-colors active:scale-95">Pause</button>
+        <button onclick="sendCommand('RESUME')" class="bg-emerald-50 border-2 border-emerald-200 py-5 rounded-2xl font-black text-emerald-600 uppercase text-sm hover:bg-emerald-100 hover:border-emerald-300 transition-colors active:scale-95">Resume</button>
+        <button onclick="sendCommand('RESET')" class="bg-white border-2 border-slate-200 py-5 rounded-2xl font-black text-slate-400 uppercase text-sm hover:border-blue-300 hover:text-blue-500 transition-colors active:scale-95">Reset</button>
+      </div>
+    </div>
+
+    <p class="text-center text-[10px] text-slate-400 font-black uppercase tracking-wider">BDBD ROBOTICS • M0609 Controller</p>
+  </div>
+
+<script>
+/* ================= Configuration ================= */
+const ROBOT_ID = "dsr01";
+
+/* ================= Firebase (상태 모니터링) ================= */
+const firebaseConfig = {
+  apiKey: "",
+  authDomain: "",
+    databaseURL: "h",
+  projectId: "test1-ee344",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: "",
+};
+
+// Firebase 초기화
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+const db = firebase.database();
+const currentRef = db.ref(`robots/${ROBOT_ID}/current`);
+const connectedRef = db.ref(".info/connected");
+
+/* ================= UI Helpers ================= */
+
+// ✅ 긴 상태 메시지를 짧은 영단어로 매핑
+const STATUS_MAP = {
+  "준비": "READY",
+  "공정 시작": "STARTING",
+  "PICK END": "PICK DONE",
+  "잔반 처리 시작": "TRASH OUT",
+  "잔반 처리 중": "DISPOSING",
+  "잔반 처리 완료": "TRASH DONE",
+  "뜨거운 물 세척 시작": "HOT WASH",
+  "뜨거운 물 세척 끝": "HOT DONE",
+  "식판 세척 시작": "SCRUBBING",
+  "식판 세척 완료": "SCRUB DONE",
+  "찬물 세척 시작": "RINSING",
+  "식판 적재 완료": "COMPLETE",
+  "RUNNING": "RUNNING",
+  "PAUSED": "PAUSED",
+  "STOPPED": "STOPPED",
+  "ALL_DONE": "FINISHED",
+  "RESET": "RESET",
+  "ERROR_MODE": "MODE ERR"
+};
+
+function formatStatus(rawState) {
+  if (!rawState) return "WAITING...";
+  
+  // 1. 매핑된 단어가 있으면 사용
+  if (STATUS_MAP[rawState]) return STATUS_MAP[rawState];
+
+  // 2. 없으면 영어로 포함된 키워드 찾기
+  const s = rawState.toUpperCase();
+  if (s.includes("PICK")) return "PICKING";
+  if (s.includes("TURBID") || s.includes("TRASH")) return "TRASH OUT";
+  if (s.includes("HOT")) return "HOT WASH";
+  if (s.includes("BRUSH") || s.includes("SCRUB")) return "SCRUBBING";
+  if (s.includes("COLD")) return "RINSING";
+  if (s.includes("STACK")) return "STACKING";
+  if (s.includes("ERROR")) return "ERROR";
+  if (s.includes("PAUSED")) return "PAUSED";
+  
+  // 3. 다 아니면 그냥 출력 (CSS가 ... 처리함)
+  return s;
+}
+
+function setStatusText(t){ 
+  // 포맷팅 적용
+  const finalObj = formatStatus(t);
+  // 만약 전송 중(SENDING...) 같은 임시 메시지면 그대로 출력
+  const finalText = (t && t.includes("...")) ? t : finalObj;
+  
+  document.getElementById("status-text").innerText = finalText; 
+}
+
+function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+function setProgress(p){
+  const pct = clamp(Number(p ?? 0), 0, 100);
+  document.getElementById("progress-val").innerText = String(pct);
+  document.getElementById("progress-bar").style.width = `${pct}%`;
+}
+
+function setSystemTime(ts){
+  const el = document.getElementById("system-time");
+  if(el) el.innerText = ts ? new Date(ts).toLocaleString() : "SYSTEM READY";
+}
+
+function clearActiveSteps(){
+  ["PICK","TURBID","HOT","BRUSH","COLD","STACK"].forEach(k => document.getElementById(`step-${k}`)?.classList.remove("active-step"));
+}
+
+function activateStep(k){
+  clearActiveSteps();
+  if (k) document.getElementById(`step-${k}`)?.classList.add("active-step");
+}
+
+function stateToStep(s){
+  s = (s || "").toUpperCase();
+  if (s.includes("PICK")) return "PICK";
+  if (s.includes("TURBID") || s.includes("TRASH")) return "TURBID"; 
+  if (s.includes("HOT")) return "HOT";
+  if (s.includes("BRUSH") || s.includes("SCRUB")) return "BRUSH";
+  if (s.includes("COLD")) return "COLD";
+  if (s.includes("STACK") || s.includes("FINAL")) return "STACK";
+  return null;
+}
+
+function setConnUI(isOnline){
+  const dot  = document.getElementById("status-dot");
+  const text = document.getElementById("conn-text");
+  if (!dot || !text) return;
+  
+  if (isOnline) {
+    dot.className = "w-2.5 h-2.5 bg-emerald-400 rounded-full";
+    text.className = "text-[11px] font-black text-emerald-600 uppercase tracking-wider";
+    text.innerText = "Online";
+  } else {
+    dot.className = "w-2.5 h-2.5 bg-slate-300 rounded-full";
+    text.className = "text-[11px] font-black text-slate-400 uppercase tracking-wider";
+    text.innerText = "Offline";
+  }
+}
+
+// ✅ START 버튼 상태 업데이트 함수
+function updateStartButton(state) {
+  const btn = document.getElementById("btn-start");
+  const txt = document.getElementById("btn-start-text");
+  if(!btn || !txt) return;
+
+  const s = (state || "").toUpperCase();
+  // 정지 상태나 대기 상태가 아니면 "RUNNING"으로 간주
+  const isIdle = ["준비", "READY", "WAITING", "STOPPED", "COMPLETED", "ALL_DONE", "RESET", "FINISHED", "STACK DONE"].includes(s) || s.includes("ERROR");
+
+  if (!isIdle) {
+    // RUNNING 상태 (버튼 눌림 효과 적용)
+    btn.classList.add("btn-pressed");
+    txt.innerText = "RUNNING...";
+  } else {
+    // IDLE 상태 (원상복구)
+    btn.classList.remove("btn-pressed");
+    txt.innerText = "SYSTEM START";
+  }
+}
+
+// Firebase Listeners
+connectedRef.on("value", snap => setConnUI(!!snap.val()));
+
+currentRef.on("value", snap => {
+  const d = snap.val();
+  if (!d) { 
+    setStatusText("Waiting..."); 
+    setProgress(0); 
+    clearActiveSteps(); 
+    setSystemTime(null); 
+    updateStartButton("READY"); // 기본값
+    return; 
+  }
+  
+  // 1. 상태 텍스트 업데이트 (매핑 적용)
+  setStatusText(d.state || "WAITING");
+  
+  // 2. 진행률 업데이트
+  setProgress(d.progress ?? 0);
+  
+  // 3. 스텝 하이라이트
+  activateStep((d.step || stateToStep(d.state) || "").toUpperCase());
+  
+  // 4. 시간 업데이트
+  setSystemTime(d.updated_at || null);
+
+  // 5. ✅ 버튼 상태 업데이트
+  updateStartButton(d.state);
+});
+
+/* ================= Commands (Firebase 방식) ================= */
+function sendCommand(cmd) {
+  const c = String(cmd || "").toUpperCase();
+
+  setStatusText(`SENDING...`); // 짧게 표시
+
+  const cmdRef = db.ref(`robots/${ROBOT_ID}/command`);
+
+  cmdRef.set({
+      cmd: c,
+      status: "NEW", 
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    })
+    .then(() => {
+      console.log(`[Firebase] Command '${c}' uploaded.`);
+      // 성공 시 UI 메시지는 리스너가 처리하게 둠 (즉각 반응 원하면 아래 주석 해제)
+      // setStatusText(`${c} SENT`); 
+    })
+    .catch((error) => {
+      console.error("[Firebase] Write Error:", error);
+      setStatusText(`CMD ERROR`);
+      alert("명령 전송 실패: " + error.message);
+    });
+}
+</script>
+</body>
+</html>
